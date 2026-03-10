@@ -57,8 +57,8 @@ class Value:
     def __sub__(self, other):
         return self + -other
 
-    def __rsub__(self, other):
-        return self - other
+    def __rsub__(self, other): # other - self
+        return other + -self
 
     def __truediv__(self, other):
         return self * other ** -1
@@ -81,23 +81,34 @@ class Value:
         return out
     
     def tanh(self):
-        e = (self*2).exp()
-        return (e-1)/(e+1)
+        #print("tanh", self.data)
+        out = Value(math.tanh(self.data), (self, ))
+        def _backward():
+            self.grad += (1 - out.data*out.data) * out.grad
+        out._backward = _backward
+        return out
 
     def backward(self, zero_grad=True):
-        # Topological sort
-        sorted_list=[]
-        seen = set()
-        def topological_sort(a:Value):
-            if not a in seen:
-                seen.add(a)
-                for child in a.children:
-                    topological_sort(child)
-                sorted_list.append(a)
-                if zero_grad:
-                    a.grad = 0
+        # **** Topological sort
+        deg: list[list[Value]] = [[self]]
+        while deg[-1] != []:
+            deg.append([x for xs in deg[-1] for x in xs.children])
 
-        topological_sort(self)
+        seen = set()
+        sorted_list:list[Value]=[]
+
+        for xs in reversed(deg):
+            for x in xs:
+                if not x in seen:
+                    seen.add(x)
+                    sorted_list.append(x)
+        
+        # **** 
+        if zero_grad:
+            for x in reversed(sorted_list):
+                x.grad = 0
+
         self.grad = 1.0
-        for e in reversed(sorted_list):
-            e._backward()
+        for x in reversed(sorted_list):
+            x._backward()
+
